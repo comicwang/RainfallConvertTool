@@ -20,27 +20,43 @@ namespace RainfallConvertTool
             InitializeComponent();
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        private void SetUnEnable()
         {
-            int? start = Convert.ToInt32(nums.Value);
-            int? end = Convert.ToInt32(mune.Value);
-            if (checkBox3.Checked == false)
-            {
-                start = null;
-                end = null;
-            }
+            btnStart.Enabled = false;
+            btnRun.Enabled = true;
+            btnExit.Enabled = true;
+            groupBox1.Enabled = false;
+            groupBox2.Enabled = false;
+            groupBox3.Enabled = false;
+            progressBar1.Visible = true;
+        }
 
-            DateTime? startT = dtpStart.Value;
-            DateTime? endT = dtpEnd.Value;
-            if (checkBox1.Checked == false)
+        private void SetEnable()
+        {
+            if (btnStart.InvokeRequired)
             {
-                startT = null;
-                endT = null;
+                btnStart.Invoke(new Action(delegate
+                {
+                    btnStart.Enabled = true;
+                    btnRun.Enabled = false;
+                    btnExit.Enabled = false;
+                    groupBox1.Enabled = true;
+                    groupBox2.Enabled = true;
+                    groupBox3.Enabled = true;
+                    progressBar1.Visible = false;
+
+                }));
             }
-            foreach (var item in _contents)
+            else
             {
-                RainfallUtility.InsertMetaData(item, checkBox2.Checked ? txtState.Text : null, start, end, startT, endT);
-            }       
+                btnStart.Enabled = true;
+                btnRun.Enabled = false;
+                btnExit.Enabled = false;
+                groupBox1.Enabled = true;
+                groupBox2.Enabled = true;
+                groupBox3.Enabled = true;
+                progressBar1.Visible = false;
+            }
         }
 
         private void FormMain_Load(object sender, EventArgs e)
@@ -74,7 +90,7 @@ namespace RainfallConvertTool
 
         private void txtFilePath_TextChanged(object sender, EventArgs e)
         {
-            groupBox1.Enabled = File.Exists(txtFilePath.Text);
+            btnStart.Enabled = (!radioButton1.Checked) || (File.Exists(txtFilePath.Text) && radioButton1.Checked);
         }
 
         private void checkBox2_CheckedChanged(object sender, EventArgs e)
@@ -94,20 +110,43 @@ namespace RainfallConvertTool
             mune.Enabled = checkBox3.Checked;
         }
 
-        private void button3_Click(object sender, EventArgs e)
+        private void btnRun_Click(object sender, EventArgs e)
         {
-            DateTime? startT = dtpStart.Value;
-            DateTime? endT = dtpEnd.Value;
-            if (checkBox1.Checked == false)
+            if (btnRun.Text == "暂停")
             {
-                startT = null;
-                endT = null;
+                RainfallUtility.CurrentThread.Suspend();
+                btnRun.Text = "继续";
             }
-            RainfallUtility.StaticDataNew(checkBox2.Checked ? txtState.Text : null, startT, endT);
+            else
+            {
+                RainfallUtility.CurrentThread.Resume();
+                btnRun.Text = "暂停";
+            }
         }
 
-        private void button4_Click(object sender, EventArgs e)
+        private void btnExit_Click(object sender, EventArgs e)
         {
+            if (RainfallUtility.CurrentThread != null)
+            {
+                if ((RainfallUtility.CurrentThread.ThreadState & System.Threading.ThreadState.Suspended) != 0)
+                    RainfallUtility.CurrentThread.Resume();
+                RainfallUtility.CurrentThread.Abort();
+                SetEnable();
+                MyConsole.AppendLine("雨量数据入库停止了..");
+            }
+        }
+
+        private void btnStart_Click(object sender, EventArgs e)
+        {
+            SetUnEnable();
+            int? start = Convert.ToInt32(nums.Value);
+            int? end = Convert.ToInt32(mune.Value);
+            if (checkBox3.Checked == false)
+            {
+                start = null;
+                end = null;
+            }
+
             DateTime? startT = dtpStart.Value;
             DateTime? endT = dtpEnd.Value;
             if (checkBox1.Checked == false)
@@ -115,7 +154,21 @@ namespace RainfallConvertTool
                 startT = null;
                 endT = null;
             }
-            RainfallUtility.StaticMaxData(checkBox2.Checked ? txtState.Text : null, startT, endT);
+            if (radioButton1.Checked)
+            {
+                foreach (var item in _contents)
+                {
+                    RainfallUtility.InsertMetaData(item, checkBox2.Checked ? txtState.Text : null, start, end, startT, endT, checkBox4.Checked, SetEnable);
+                }
+            }
+            else if(radioButton2.Checked)
+            {
+                RainfallUtility.StaticDataNew(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable);
+            }
+            else
+            {
+                RainfallUtility.StaticMaxData(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable);
+            }
         }
     }
 }

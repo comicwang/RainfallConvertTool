@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using System.Data.SQLite;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -13,6 +14,14 @@ namespace RainfallConvertTool.Utility
 {
     public class RainfallUtility
     {
+        public static Thread CurrentThread;
+
+        static int total = 0;
+        static int successed = 0;
+        static int failed = 0;
+
+        #region 基础数据入库
+
         /// <summary>
         /// 插入源数据
         /// </summary>
@@ -22,13 +31,17 @@ namespace RainfallConvertTool.Utility
         /// <param name="end"></param>
         /// <param name="startTime"></param>
         /// <param name="endTime"></param>
-        public static void InsertMetaData(string[][] content, string statelimit, int? start, int? end, DateTime? startTime, DateTime? endTime)
+        public static void InsertMetaData(string[][] content, string statelimit, int? start, int? end, DateTime? startTime, DateTime? endTime,bool update,Action action)
         {
             int colsCount = content[0].Length;
             MyConsole.AppendLine(string.Format("共找到{0}行数据..", content.Count()));
 
-            Thread thread = new Thread(new ParameterizedThreadStart(delegate
+            CurrentThread = new Thread(new ParameterizedThreadStart(delegate
             {
+                DateTime cuurentDate = DateTime.Now;
+                total = 0;
+                successed = 0;
+                failed = 0;
                 //52位数据 站点 年 月 日 20~23雨量 0~19雨量 20~23控制码 0~19控制码
                 if (colsCount == 52)
                 {
@@ -60,30 +73,31 @@ namespace RainfallConvertTool.Utility
                             if ((startTime.HasValue && dateTemp < startTime) || (endTime.HasValue && dateTemp > endTime))
                                 continue;
                             RainfallModel temp = new RainfallModel(state, null, null, null, dateTemp, rainfall, control);
-                            InsertToSql(temp);
+                            InsertToSql(temp, update);
                             //Thread.Sleep(100);
                         }
                         for (int i = 20; i < 24; i++)
                         {
                             int control = int.Parse(content[index][i + 8]);
                             decimal? rainfall = null;
-                            if (content[index][i -16] == "32766")
+                            if (content[index][i - 16] == "32766")
                                 rainfall = 0;
                             else
-                                rainfall = Decimal.Parse(content[index][i -16]) / 10;
+                                rainfall = Decimal.Parse(content[index][i - 16]) / 10;
                             DateTime dateTemp = new DateTime(year, month, date, i, 0, 0);
                             //筛选时间
                             if ((startTime.HasValue && dateTemp < startTime) || (endTime.HasValue && dateTemp > endTime))
                                 continue;
 
                             RainfallModel temp = new RainfallModel(state, null, null, null, dateTemp, rainfall, control);
-                            InsertToSql(temp);
+                            //InsertToSql(temp);
+                            InsertToSql(temp, update);
                             //Thread.Sleep(100);
                         }
                     }
                 }
                 //6字段     Sta       Lon       Lat     Alt      Date       Pre
-                else if(colsCount == 6)
+                else if (colsCount == 6)
                 {
                     for (int index = 1; index < content.Count(); index++)
                     {
@@ -98,12 +112,12 @@ namespace RainfallConvertTool.Utility
                             continue;
                         int value = 0;  //控制码默认为0
                         decimal? key = Decimal.Parse(content[index][5]);
-                        DateTime dateTemp = DateTime.ParseExact(content[index][4],"yyyyMMddHH",null);
+                        DateTime dateTemp = DateTime.ParseExact(content[index][4], "yyyyMMddHH", null);
                         //筛选时间
                         if ((startTime.HasValue && dateTemp < startTime) || (endTime.HasValue && dateTemp > endTime))
                             continue;
                         RainfallModel temp = new RainfallModel(state, Decimal.Parse(content[index][1]), Decimal.Parse(content[index][2]), Decimal.Parse(content[index][3]), dateTemp, key, value);
-                        InsertToSql(temp);
+                        InsertToSql(temp, update);
                         //Thread.Sleep(100);
                     }
                 }
@@ -128,118 +142,48 @@ namespace RainfallConvertTool.Utility
                         if ((startTime.HasValue && dateTemp < startTime) || (endTime.HasValue && dateTemp > endTime))
                             continue;
                         RainfallModel temp = new RainfallModel(state, null, null, null, dateTemp, key, value);
-                        InsertToSql(temp);
+                        InsertToSql(temp, update);
                         //Thread.Sleep(100);
                     }
                 }
+                MyConsole.AppendLine(string.Format("导入数据完成，成功{0}条，失败{1}条，共{2}条，耗时{3}秒",successed,failed,total,(DateTime.Now-cuurentDate).TotalSeconds));
+                action.Invoke();
 
             }));
-            thread.IsBackground = true;
-            thread.Start();
+            CurrentThread.IsBackground = true;
+            CurrentThread.Start();
         }
 
-     
-        public static void StaticMaxData(string statelimit,DateTime? startTime, DateTime? endTime)
+        /// <summary>
+        /// 将读取的元数据插入数据库
+        /// </summary>
+        /// <param name="model"></param>
+        private static void InsertToSql(RainfallModel model, bool update)
         {
-            Thread thread = new Thread(new ParameterizedThreadStart(delegate
-            {
-                List<string[]> states = new List<string[]>();
-                if (string.IsNullOrEmpty(statelimit) == false)
-                {
-                    //查询所有站点
-                    string sql = " SELECT MONITORNUM,LON,LAT,ALT FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where MONITORNUM='" + statelimit + "' group by MONITORNUM,LON,LAT,ALT";
-                    DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
-                    foreach (DataRow item in ds.Tables[0].Rows)
-                    {
-                        states.Add(new string[] { item[0].ToString(), item[1].ToString(), item[2].ToString(), item[3].ToString() });
-                        break;
-                    }
-                }
-                else
-                {
-                    //查询所有站点
-                    string sql = " SELECT MONITORNUM,LON,LAT,ALT FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] group by MONITORNUM,LON,LAT,ALT";
-                    DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
-                    foreach (DataRow item in ds.Tables[0].Rows)
-                    {
-                        states.Add(new string[] { item[0].ToString(), item[1].ToString(), item[2].ToString(), item[3].ToString() });
-                    }
-                }
-
-                foreach (string[] state in states)
-                {
-                    //查询需要统计时间范围
-                    string commandText = "select MAX(RecordDate),MIN(RecordDate) FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where MONITORNUM='" + state[0] + "'";
-
-                    DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
-                    DateTime maxDate = DateTime.Parse(ds.Tables[0].Rows[0][0].ToString());
-                    DateTime minDate = DateTime.Parse(ds.Tables[0].Rows[0][1].ToString());
-                    //筛选时间
-                    if (startTime.HasValue && minDate < startTime)
-                        minDate = startTime.Value;
-                    if (endTime.HasValue && maxDate > endTime)
-                        maxDate = endTime.Value;
-
-                    MyConsole.AppendLine(string.Format("统计开始时间为{0},结束时间为{1}..", minDate, maxDate));
-
-                    decimal lon = string.IsNullOrEmpty(state[1]) ? 0 : Convert.ToDecimal(state[1]);
-                    decimal lat = string.IsNullOrEmpty(state[2]) ? 0 : Convert.ToDecimal(state[2]);
-                    decimal alt = string.IsNullOrEmpty(state[3]) ? 0 : Convert.ToDecimal(state[3]);
-
-                    //年循环
-                    for (int year = minDate.Year; year <= maxDate.Year; year++)
-                    {
-                        try
-                        {
-                            MyConsole.ShowProgress(year * 100 / maxDate.Year);
-                            //获取天最大值
-                            string commmandText = "select MAX([RAINFALL _1_DAY]),MAX([RAINFALL _3_DAY]),MAX([RAINFALL _5_DAY]),MAX([RAINFALL _7_DAY]),MAX([RAINFALL _15_DAY]),MAX([RAINFALL _30_DAY]) from RAINFALL_DAY where datepart(yy,TIME)='" + year + "'";
-                            ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commmandText);
-                            decimal? day = ConvertDecimal(ds.Tables[0].Rows[0][0]);
-                            if (day == null)
-                            {
-                                MyConsole.AppendLine("当前年缺少数据来源，无法统计..");
-                                continue;
-                            }
-                            decimal? day_3 = ConvertDecimal(ds.Tables[0].Rows[0][1]);
-                            decimal? day_5 = ConvertDecimal(ds.Tables[0].Rows[0][2]);
-                            decimal? day_7 = ConvertDecimal(ds.Tables[0].Rows[0][3]);
-                            decimal? day_15 = ConvertDecimal(ds.Tables[0].Rows[0][4]);
-                            decimal? day_30 = ConvertDecimal(ds.Tables[0].Rows[0][5]);
-
-                            commmandText = "select MAX([RAINFALL _1_HOUR]),MAX([RAINFALL _3_HOUR]),MAX([RAINFALL _6_HOUR]),MAX([RAINFALL _12_HOUR]),MAX([RAINFALL _24_HOUR]),MAX([RAINFALL _48_HOUR]),MAX([RAINFALL _72_HOUR]) from RAINFALL_HOUR where datepart(yy,TIME)='" + year + "'";
-                            ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commmandText);
-                            decimal? hour = ConvertDecimal(ds.Tables[0].Rows[0][0]);
-                            decimal? hour_3 = ConvertDecimal(ds.Tables[0].Rows[0][1]);
-                            decimal? hour_6 = ConvertDecimal(ds.Tables[0].Rows[0][2]);
-                            decimal? hour_12 = ConvertDecimal(ds.Tables[0].Rows[0][3]);
-                            decimal? hour_24 = ConvertDecimal(ds.Tables[0].Rows[0][4]);
-                            decimal? hour_48 = ConvertDecimal(ds.Tables[0].Rows[0][5]);
-                            decimal? hour_72 = ConvertDecimal(ds.Tables[0].Rows[0][6]);
-
-                            commandText = string.Format("insert into RAINFALL_YEAR_MAX values('{0}','{1}',{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},{20})", Guid.NewGuid(), state[0], lon, lat, alt, year, "null", "null", hour, hour_3, hour_6, hour_12, hour_24, hour_48, hour_72, day, day_3, day_5, day_7, day_15, day_30);
-                            int line = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnection(), CommandType.Text, commandText);
-
-                            //插入一条年统计数据
-                            MyConsole.AppendLine(string.Format("插入年统计数据:站点{0},年份{1},{2}", state[0], year, line == 0 ? "失败" : "成功"));
-                        }
-                        catch (Exception ex)
-                        {
-                            MyConsole.AppendLine(string.Format("插入年统计数据:站点{0},年份{1},失败-{2}", state[0], year, ex.Message));
-                        }
-                    }
-                }
-
-            }));
-            thread.IsBackground = true;
-            thread.Start();
-        }
-
-        private static void InsertToSql(RainfallModel model)
-        {
+            total++;
             try
             {
-                string commandText = "insert into [DB_RainMonitor].[dbo].[RAINFALL_STATE] values(@GUID,@MONITORNUM,@LON,@LAT,@ALT,@RecordDate,@RAINFALL,@Controller)";
+                string commandText = string.Empty;
+                int line = -1;
+                if (update)
+                {
+                    //先判断数据是否存在，存在更新，不存在新增
+                    commandText = string.Format("select * from [DB_RainMonitor].[dbo].[RAINFALL_STATE] where MONITORNUM='{0}' and RecordDate='{1}'", model.MONITORNUM, model.RecordDate);
+                    object obj = SqlHelper.ExecuteScalar(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                    if (obj != null)
+                    {
+                        commandText = string.Format("update RAINFALL_STATE set RAINFALL={0} where MONITORNUM='{1}' and RecordDate='{2}'", model.RAINFALL, model.MONITORNUM, model.RecordDate);
+                        line = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                        MyConsole.AppendLine(string.Format("更新数据站点{0},时间{1}{2}..", model.MONITORNUM, model.RecordDate, line == 1 ? "成功" : "失败"));
+                        if (line == 1)
+                            successed++;
+                        else
+                            failed++;
+                        return;
+                    }
+                }
+                commandText = "insert into [DB_RainMonitor].[dbo].[RAINFALL_STATE] values(@GUID,@MONITORNUM,@LON,@LAT,@ALT,@RecordDate,@RAINFALL,@Controller)";
+                //commandText = "InsertMetaData";  //存储过程名称
                 List<SqlParameter> result = new List<SqlParameter>();
                 SqlParameter param = new SqlParameter("@GUID", model.GUID);
                 param.DbType = System.Data.DbType.StringFixedLength;
@@ -265,7 +209,28 @@ namespace RainfallConvertTool.Utility
                 SqlParameter param7 = new SqlParameter("@Controller", model.Controller);
                 param7.DbType = System.Data.DbType.Int32;
                 result.Add(param7);
-                int line = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText, result.ToArray());
+                line = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText, result.ToArray());
+
+                MyConsole.AppendLine(string.Format("导入数据站点{0},时间{1}{2}..", model.MONITORNUM, model.RecordDate, line == 1 ? "成功" : "失败"));
+                if (line == 1)
+                    successed++;
+                else
+                    failed++;
+            }
+            catch (Exception ex)
+            {
+                MyConsole.AppendLine(string.Format("导入数据站点{0},时间{1}异常：{2}..", model.MONITORNUM, model.RecordDate, ex.Message));
+                failed++;
+            }
+        }
+
+        private static void InsertToSqllite(RainfallModel model)
+        {
+            try
+            {
+                string commandText = string.Format("insert into RAINFALL_STATE values('{0}','{1}',{2},{3},{4},'{5}',{6},{7})", model.GUID, model.MONITORNUM, model.LON, model.LAT, model.ALT, model.RecordDate.ToString("yyyy-MM-dd hh:mm:ss"), model.RAINFALL, model.Controller);
+             
+                int line = SQLiteHelper.ExecuteNonQuery(commandText);
 
                 MyConsole.AppendLine(string.Format("导入数据站点{0},时间{1}{2}..", model.MONITORNUM, model.RecordDate, line == 1 ? "成功" : "失败"));
             }
@@ -275,11 +240,15 @@ namespace RainfallConvertTool.Utility
             }
         }
 
+        #endregion
+
+        #region 统计单点小时和天雨量数据
+
         #region 旧版效率低
 
         public static void StaticData(string statelimit, DateTime? startTime, DateTime? endTime)
         {
-            Thread thread = new Thread(new ParameterizedThreadStart(delegate
+            CurrentThread = new Thread(new ParameterizedThreadStart(delegate
             {
                 List<string[]> states = new List<string[]>();
                 if (string.IsNullOrEmpty(statelimit) == false)
@@ -359,8 +328,8 @@ namespace RainfallConvertTool.Utility
                 }
 
             }));
-            thread.IsBackground = true;
-            thread.Start();
+            CurrentThread.IsBackground = true;
+            CurrentThread.Start();
         }
 
         private static void ExcuteStaticDay(DateTime endDate, string state, decimal lon, decimal lat, decimal alt)
@@ -546,10 +515,17 @@ namespace RainfallConvertTool.Utility
 
         #region 单小时添加
 
-        public static void StaticDataNew(string statelimit, DateTime? startTime, DateTime? endTime)
+        /// <summary>
+        /// 插入统计小时数据和天数据
+        /// </summary>
+        /// <param name="statelimit"></param>
+        /// <param name="startTime"></param>
+        /// <param name="endTime"></param>
+        public static void StaticDataNew(string statelimit, DateTime? startTime, DateTime? endTime,Action action)
         {
-            Thread thread = new Thread(new ParameterizedThreadStart(delegate
+            CurrentThread = new Thread(new ParameterizedThreadStart(delegate
             {
+                DateTime currentDateTime = DateTime.Now;
                 List<string> states = new List<string>();
                 if (string.IsNullOrEmpty(statelimit) == false)
                 {
@@ -616,19 +592,45 @@ namespace RainfallConvertTool.Utility
                         }
                     }
                 }
+                MyConsole.AppendLine("统计结束,耗时" + (DateTime.Now - currentDateTime).TotalSeconds + "秒");
+                action.Invoke();
 
             }));
-            thread.IsBackground = true;
-            thread.Start();
+            CurrentThread.IsBackground = true;
+            CurrentThread.Start();
         }
 
-        private static  void InsertHour(string state, DateTime endDate)
+        /// <summary>
+        /// 插入小时数据
+        /// </summary>
+        /// <param name="state"></param>
+        /// <param name="endDate"></param>
+        private static void InsertHour(string state, DateTime endDate)
         {
-            //结束时间，站号，1，3，6，12，24，48，72
-            string commandText = string.Format("insert into [DB_RainMonitor].[dbo].[RAINFALL_HOUR] select NEWID(),* from (((((((SELECT '{1}' as MONITORNUM,SUM(LON) as LON,SUM(LAT) as LAT,SUM(ALT) AS ALT,'{0}' as TIME,SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{2}' and RecordDate<='{0}' and MONITORNUM='{1}') as t1 right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{3}' and RecordDate<='{0}' and MONITORNUM='{1}') as t2 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{4}' and RecordDate<='{0}' and MONITORNUM='{1}') as t3 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{5}' and RecordDate<='{0}' and MONITORNUM='{1}') as t4 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{6}' and RecordDate<='{0}' and MONITORNUM='{1}') as t5 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{7}' and RecordDate<='{0}' and MONITORNUM='{1}') as t6 on 1=1) right join (SELECT SUM(RAINFALL) as sum1,0 as c1,0 as c2,0 as c3,0 as c4,0 as c5,0 as c6,0 as c7 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{8}' and RecordDate<='{0}' and MONITORNUM='{1}') as t7 on 1=1)", endDate, state, endDate.AddHours(-1), endDate.AddHours(-3), endDate.AddHours(-6), endDate.AddHours(-12), endDate.AddHours(-24), endDate.AddHours(-48), endDate.AddHours(-72));
+            string commandText = string.Empty;
 
             try
             {
+                //存在就删除
+                commandText = string.Format("SELECT * FROM [DB_RainMonitor].[dbo].[RAINFALL_HOUR] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
+                object obj = SqlHelper.ExecuteScalar(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                if (obj != null)
+                {
+                    commandText = string.Format("delete FROM [DB_RainMonitor].[dbo].[RAINFALL_HOUR] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
+                    int result = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                    MyConsole.AppendLine(string.Format("删除一条小时统计数据:站点{0},时间{1}{2}..", state, endDate, result == 0 ? "失败" : "成功"));
+                }
+            }
+            catch (Exception ex)
+            {
+                MyConsole.AppendLine("执行数据库失败：" + ex.Message);
+            }
+
+            try
+            {
+                //结束时间，站号，1，3，6，12，24，48，72
+                commandText = string.Format("insert into [DB_RainMonitor].[dbo].[RAINFALL_HOUR] select NEWID(),* from (((((((SELECT '{1}' as MONITORNUM,SUM(LON) as LON,SUM(LAT) as LAT,SUM(ALT) AS ALT,'{0}' as TIME,SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{2}' and RecordDate<='{0}' and MONITORNUM='{1}') as t1 right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{3}' and RecordDate<='{0}' and MONITORNUM='{1}') as t2 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{4}' and RecordDate<='{0}' and MONITORNUM='{1}') as t3 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{5}' and RecordDate<='{0}' and MONITORNUM='{1}') as t4 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{6}' and RecordDate<='{0}' and MONITORNUM='{1}') as t5 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{7}' and RecordDate<='{0}' and MONITORNUM='{1}') as t6 on 1=1) right join (SELECT SUM(RAINFALL) as sum1,0 as c1,0 as c2,0 as c3,0 as c4,0 as c5,0 as c6,0 as c7 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{8}' and RecordDate<='{0}' and MONITORNUM='{1}') as t7 on 1=1)", endDate, state, endDate.AddHours(-1), endDate.AddHours(-3), endDate.AddHours(-6), endDate.AddHours(-12), endDate.AddHours(-24), endDate.AddHours(-48), endDate.AddHours(-72));
+
                 int result = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnection(), CommandType.Text, commandText);
                 MyConsole.AppendLine(string.Format("插入一条小时统计数据:站点{0},时间{1}{2}..", state, endDate, result == 0 ? "失败" : "成功"));
             }
@@ -638,10 +640,33 @@ namespace RainfallConvertTool.Utility
             }
         }
 
+        /// <summary>
+        /// 插入天数据
+        /// </summary>
+        /// <param name="state"></param>
+        /// <param name="endDate"></param>
         private static void InsertDay(string state, DateTime endDate)
         {
+            string commandText = string.Empty;
+            try
+            {
+                //存在就删除
+                commandText = string.Format("SELECT * FROM [DB_RainMonitor].[dbo].[RAINFALL_DAY] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
+                object obj = SqlHelper.ExecuteScalar(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                if (obj != null)
+                {
+                    commandText = string.Format("delete FROM [DB_RainMonitor].[dbo].[RAINFALL_DAY] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
+                    int result = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                    MyConsole.AppendLine(string.Format("删除一条天统计数据:站点{0},时间{1}{2}..", state, endDate, result == 0 ? "失败" : "成功"));
+                }
+            }
+            catch (Exception ex)
+            {
+                MyConsole.AppendLine("执行数据库失败：" + ex.Message);
+            }
+
             //结束时间，站号，1，3，6，12，24，48，72
-            string commandText = string.Format("insert into [DB_RainMonitor].[dbo].[RAINFALL_DAY] select NEWID(),* from ((((((SELECT '{1}' as MONITORNUM,SUM(LON) as LON,SUM(LAT) as LAT,SUM(ALT) AS ALT,'{0}' as TIME,SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{2}' and RecordDate<='{0}' and MONITORNUM='{1}') as t1 right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{3}' and RecordDate<='{0}' and MONITORNUM='{1}') as t2 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{4}' and RecordDate<='{0}' and MONITORNUM='{1}') as t3 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{5}' and RecordDate<='{0}' and MONITORNUM='{1}') as t4 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{6}' and RecordDate<='{0}' and MONITORNUM='{1}') as t5 on 1=1) right join (SELECT SUM(RAINFALL) as sum1,0 as c1,0 as c2,0 as c3,0 as c4,0 as c5,0 as c6 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{7}' and RecordDate<='{0}' and MONITORNUM='{1}') as t6 on 1=1)", endDate, state, endDate.AddDays(-1), endDate.AddDays(-3), endDate.AddDays(-5), endDate.AddDays(-7), endDate.AddDays(-15), endDate.AddDays(-30));
+            commandText = string.Format("insert into [DB_RainMonitor].[dbo].[RAINFALL_DAY] select NEWID(),* from ((((((SELECT '{1}' as MONITORNUM,SUM(LON) as LON,SUM(LAT) as LAT,SUM(ALT) AS ALT,'{0}' as TIME,SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{2}' and RecordDate<='{0}' and MONITORNUM='{1}') as t1 right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{3}' and RecordDate<='{0}' and MONITORNUM='{1}') as t2 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{4}' and RecordDate<='{0}' and MONITORNUM='{1}') as t3 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{5}' and RecordDate<='{0}' and MONITORNUM='{1}') as t4 on 1=1) right join (SELECT SUM(RAINFALL) as sum1 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{6}' and RecordDate<='{0}' and MONITORNUM='{1}') as t5 on 1=1) right join (SELECT SUM(RAINFALL) as sum1,0 as c1,0 as c2,0 as c3,0 as c4,0 as c5,0 as c6 FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where RecordDate>'{7}' and RecordDate<='{0}' and MONITORNUM='{1}') as t6 on 1=1)", endDate, state, endDate.AddDays(-1), endDate.AddDays(-3), endDate.AddDays(-5), endDate.AddDays(-7), endDate.AddDays(-15), endDate.AddDays(-30));
 
             try
             {
@@ -656,10 +681,17 @@ namespace RainfallConvertTool.Utility
 
         #endregion
 
+        #region 24小时一次插入
 
+        /// <summary>
+        /// 24小时一次插入
+        /// </summary>
+        /// <param name="statelimit"></param>
+        /// <param name="startTime"></param>
+        /// <param name="endTime"></param>
         public static void StaticDataAllNew(string statelimit, DateTime? startTime, DateTime? endTime)
         {
-            Thread thread = new Thread(new ParameterizedThreadStart(delegate
+            CurrentThread = new Thread(new ParameterizedThreadStart(delegate
             {
                 List<string> states = new List<string>();
                 if (string.IsNullOrEmpty(statelimit) == false)
@@ -739,10 +771,16 @@ namespace RainfallConvertTool.Utility
                 }
 
             }));
-            thread.IsBackground = true;
-            thread.Start();
+            CurrentThread.IsBackground = true;
+            CurrentThread.Start();
         }
 
+        /// <summary>
+        /// 获取小时插入字符串
+        /// </summary>
+        /// <param name="state"></param>
+        /// <param name="endDate"></param>
+        /// <returns></returns>
         private static string InsertHourStr(string state, DateTime endDate)
         {
             //结束时间，站号，1，3，6，12，24，48，72
@@ -751,6 +789,133 @@ namespace RainfallConvertTool.Utility
             return commandText + Environment.NewLine;
         }
 
-       
+        #endregion
+
+        #endregion
+
+        #region 统计年最大值
+
+        /// <summary>
+        /// 统计年最大值
+        /// </summary>
+        /// <param name="statelimit"></param>
+        /// <param name="startTime"></param>
+        /// <param name="endTime"></param>
+        public static void StaticMaxData(string statelimit, DateTime? startTime, DateTime? endTime,Action action)
+        {
+            CurrentThread = new Thread(new ParameterizedThreadStart(delegate
+            {
+                DateTime currentDate = DateTime.Now;
+                List<string[]> states = new List<string[]>();
+                if (string.IsNullOrEmpty(statelimit) == false)
+                {
+                    //查询所有站点
+                    string sql = " SELECT MONITORNUM,LON,LAT,ALT FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where MONITORNUM='" + statelimit + "' group by MONITORNUM,LON,LAT,ALT";
+                    DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
+                    foreach (DataRow item in ds.Tables[0].Rows)
+                    {
+                        states.Add(new string[] { item[0].ToString(), item[1].ToString(), item[2].ToString(), item[3].ToString() });
+                        break;
+                    }
+                }
+                else
+                {
+                    //查询所有站点
+                    string sql = " SELECT MONITORNUM,LON,LAT,ALT FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] group by MONITORNUM,LON,LAT,ALT";
+                    DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
+                    foreach (DataRow item in ds.Tables[0].Rows)
+                    {
+                        states.Add(new string[] { item[0].ToString(), item[1].ToString(), item[2].ToString(), item[3].ToString() });
+                    }
+                }
+
+                foreach (string[] state in states)
+                {
+                    //查询需要统计时间范围
+                    string commandText = "select MAX(RecordDate),MIN(RecordDate) FROM [DB_RainMonitor].[dbo].[RAINFALL_STATE] where MONITORNUM='" + state[0] + "'";
+
+                    DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
+                    DateTime maxDate = DateTime.Parse(ds.Tables[0].Rows[0][0].ToString());
+                    DateTime minDate = DateTime.Parse(ds.Tables[0].Rows[0][1].ToString());
+                    //筛选时间
+                    if (startTime.HasValue && minDate < startTime)
+                        minDate = startTime.Value;
+                    if (endTime.HasValue && maxDate > endTime)
+                        maxDate = endTime.Value;
+
+                    MyConsole.AppendLine(string.Format("统计开始时间为{0},结束时间为{1}..", minDate, maxDate));
+
+                    decimal lon = string.IsNullOrEmpty(state[1]) ? 0 : Convert.ToDecimal(state[1]);
+                    decimal lat = string.IsNullOrEmpty(state[2]) ? 0 : Convert.ToDecimal(state[2]);
+                    decimal alt = string.IsNullOrEmpty(state[3]) ? 0 : Convert.ToDecimal(state[3]);
+
+                    //年循环
+                    for (int year = minDate.Year; year <= maxDate.Year; year++)
+                    {
+                        try
+                        {
+                            MyConsole.ShowProgress(year * 100 / maxDate.Year);
+
+                            //获取天最大值
+                            string commmandText = "select MAX([RAINFALL _1_DAY]),MAX([RAINFALL _3_DAY]),MAX([RAINFALL _5_DAY]),MAX([RAINFALL _7_DAY]),MAX([RAINFALL _15_DAY]),MAX([RAINFALL _30_DAY]) from RAINFALL_DAY where datepart(yy,TIME)='" + year + "'";
+                            ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commmandText);
+                            decimal? day = ConvertDecimal(ds.Tables[0].Rows[0][0]);
+                            if (day == null)
+                            {
+                                MyConsole.AppendLine(string.Format("站点{0}年份{1}缺少数据来源，无法统计..",state[0],year));
+                                continue;
+                            }
+                            decimal? day_3 = ConvertDecimal(ds.Tables[0].Rows[0][1]);
+                            decimal? day_5 = ConvertDecimal(ds.Tables[0].Rows[0][2]);
+                            decimal? day_7 = ConvertDecimal(ds.Tables[0].Rows[0][3]);
+                            decimal? day_15 = ConvertDecimal(ds.Tables[0].Rows[0][4]);
+                            decimal? day_30 = ConvertDecimal(ds.Tables[0].Rows[0][5]);
+
+                            commmandText = "select MAX([RAINFALL _1_HOUR]),MAX([RAINFALL _3_HOUR]),MAX([RAINFALL _6_HOUR]),MAX([RAINFALL _12_HOUR]),MAX([RAINFALL _24_HOUR]),MAX([RAINFALL _48_HOUR]),MAX([RAINFALL _72_HOUR]) from RAINFALL_HOUR where datepart(yy,TIME)='" + year + "'";
+                            ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commmandText);
+                            decimal? hour = ConvertDecimal(ds.Tables[0].Rows[0][0]);
+                            decimal? hour_3 = ConvertDecimal(ds.Tables[0].Rows[0][1]);
+                            decimal? hour_6 = ConvertDecimal(ds.Tables[0].Rows[0][2]);
+                            decimal? hour_12 = ConvertDecimal(ds.Tables[0].Rows[0][3]);
+                            decimal? hour_24 = ConvertDecimal(ds.Tables[0].Rows[0][4]);
+                            decimal? hour_48 = ConvertDecimal(ds.Tables[0].Rows[0][5]);
+                            decimal? hour_72 = ConvertDecimal(ds.Tables[0].Rows[0][6]);
+
+                            try
+                            {
+                                commandText = string.Format("SELECT * FROM [DB_RainMonitor].[dbo].[RAINFALL_YEAR_MAX] where MONITORNUM='{0}' and YEAR={1}", state[0], year);
+                                object obj = SqlHelper.ExecuteScalar(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                                if (obj != null)
+                                {
+                                    commandText = string.Format("delete FROM [DB_RainMonitor].[dbo].[RAINFALL_YEAR_MAX] where MONITORNUM='{0}' and YEAR={1}", state[0], year);
+                                    int result = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                                    MyConsole.AppendLine(string.Format("删除一条年统计数据:站点{0},年份{1}{2}..", state[0], year, result == 0 ? "失败" : "成功"));
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                MyConsole.AppendLine("执行数据库失败：" + ex.Message);
+                            }
+
+                            commandText = string.Format("insert into RAINFALL_YEAR_MAX values('{0}','{1}',{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},{20})", Guid.NewGuid(), state[0], lon, lat, alt, year, "null", "null", hour, hour_3, hour_6, hour_12, hour_24, hour_48, hour_72, day, day_3, day_5, day_7, day_15, day_30);
+                            int line = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnection(), CommandType.Text, commandText);
+
+                            //插入一条年统计数据
+                            MyConsole.AppendLine(string.Format("插入年统计数据:站点{0},年份{1},{2}", state[0], year, line == 0 ? "失败" : "成功"));
+                        }
+                        catch (Exception ex)
+                        {
+                            MyConsole.AppendLine(string.Format("插入年统计数据:站点{0},年份{1},失败-{2}", state[0], year, ex.Message));
+                        }
+                    }
+                }
+                MyConsole.AppendLine("统计结束,耗时" + (DateTime.Now - currentDate).TotalSeconds + "秒");
+                action.Invoke();
+            }));
+            CurrentThread.IsBackground = true;
+            CurrentThread.Start();
+        }
+
+        #endregion
     }
 }
