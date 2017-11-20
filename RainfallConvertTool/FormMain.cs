@@ -63,6 +63,7 @@ namespace RainfallConvertTool
         {
             textBox1.BindConsole();
             progressBar1.BindProgressBar();
+            toolleftTime.BindLabel();
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -163,7 +164,7 @@ namespace RainfallConvertTool
             }
             else if(radioButton2.Checked)
             {
-                RainfallUtility.StaticDataNew(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable);
+                RainfallUtility.StaticDataNew(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable, checkBox4.Checked);
             }
             else
             {

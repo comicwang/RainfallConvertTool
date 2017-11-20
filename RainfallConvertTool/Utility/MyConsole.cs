@@ -15,6 +15,7 @@ namespace RainfallConvertTool
 
         static TextBox _textBox = null;
         static ProgressBar _progressBar = null;
+        static ToolStripStatusLabel _label = null;
 
         /// <summary>
         /// 绑定该输出控制台（程序唯一）
@@ -30,6 +31,11 @@ namespace RainfallConvertTool
         public static void BindProgressBar(this ProgressBar progressbar)
         {
             _progressBar = progressbar;
+        }
+
+        public static void BindLabel(this ToolStripStatusLabel label)
+        {
+            _label = label;
         }
 
         /// <summary>
@@ -55,6 +61,16 @@ namespace RainfallConvertTool
                 _progressBar.Invoke(new Action<int>((t) => { _progressBar.Value = t; }), vaule);
             else
                 _progressBar.Value = vaule;
+        }
+
+        public static void ShowLabel(string vaule)
+        {
+            if (_label == null)
+                throw new ArgumentNullException("_label is unbind");
+            //if (_label.InvokeRequired)
+            //    _label.Invoke(new Action<int>((t) => { _progressBar.Value = t; }), vaule);
+            //else
+            _label.Text = vaule;
         }
     }
 }

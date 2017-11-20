@@ -61,6 +61,7 @@
             this.radioButton1 = new System.Windows.Forms.RadioButton();
             this.btnStart = new System.Windows.Forms.Button();
             this.btnExit = new System.Windows.Forms.Button();
+            this.toolleftTime = new System.Windows.Forms.ToolStripStatusLabel();
             this.groupBox1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nums)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.mune)).BeginInit();
@@ -286,7 +287,8 @@
             // statusStrip1
             // 
             this.statusStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.lblResult});
+            this.lblResult,
+            this.toolleftTime});
             this.statusStrip1.Location = new System.Drawing.Point(0, 434);
             this.statusStrip1.Name = "statusStrip1";
             this.statusStrip1.Size = new System.Drawing.Size(548, 22);
@@ -388,6 +390,11 @@
             this.btnExit.UseVisualStyleBackColor = true;
             this.btnExit.Click += new System.EventHandler(this.btnExit_Click);
             // 
+            // toolleftTime
+            // 
+            this.toolleftTime.Name = "toolleftTime";
+            this.toolleftTime.Size = new System.Drawing.Size(0, 17);
+            // 
             // FormMain
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -460,6 +467,7 @@
         private System.Windows.Forms.RadioButton radioButton1;
         private System.Windows.Forms.Button btnStart;
         private System.Windows.Forms.Button btnExit;
+        private System.Windows.Forms.ToolStripStatusLabel toolleftTime;
     }
 }
 

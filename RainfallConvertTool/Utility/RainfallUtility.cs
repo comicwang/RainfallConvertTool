@@ -521,12 +521,13 @@ namespace RainfallConvertTool.Utility
         /// <param name="statelimit"></param>
         /// <param name="startTime"></param>
         /// <param name="endTime"></param>
-        public static void StaticDataNew(string statelimit, DateTime? startTime, DateTime? endTime,Action action)
+        public static void StaticDataNew(string statelimit, DateTime? startTime, DateTime? endTime, Action action, bool update = false)
         {
             CurrentThread = new Thread(new ParameterizedThreadStart(delegate
             {
                 DateTime currentDateTime = DateTime.Now;
                 List<string> states = new List<string>();
+                string totalStr = string.Empty;
                 if (string.IsNullOrEmpty(statelimit) == false)
                 {
                     //查询所有站点
@@ -537,6 +538,7 @@ namespace RainfallConvertTool.Utility
                         states.Add(item[0].ToString());
                         break;
                     }
+                    totalStr = "select count(*) from [DB_RainMonitor].[dbo].[RAINFALL_STATE] where MONITORNUM='" + statelimit + "'";
                 }
                 else
                 {
@@ -547,7 +549,15 @@ namespace RainfallConvertTool.Utility
                     {
                         states.Add(item[0].ToString());
                     }
+                    totalStr = "select count(*) from [DB_RainMonitor].[dbo].[RAINFALL_STATE] ";
                 }
+                DataSet dsTotal = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, totalStr);
+
+                int total = int.Parse(dsTotal.Tables[0].Rows[0][0].ToString());
+               
+
+
+                int index = 0;
 
                 foreach (string state in states)
                 {
@@ -565,32 +575,63 @@ namespace RainfallConvertTool.Utility
 
                     MyConsole.AppendLine(string.Format("统计开始时间为{0},结束时间为{1}..", minDate, maxDate));
 
-                    //年循环
-                    for (int year = minDate.Year; year <= maxDate.Year; year++)
+                    #region 查询所有非空雨量的值，进行统计
+
+                    commandText = "select RecordDate from RAINFALL_STATE where MONITORNUM='" + state + "'" + " and RAINFALL!=0 order by RecordDate";
+
+                    ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
+                    foreach (DataRow item in ds.Tables[0].Rows)
                     {
-                        //月循环
-                        for (int month = 1; month < 13; month++)
-                        {
-                            //天循环
-                            for (int day = 1; day <= DateTime.DaysInMonth(year, month); day++)
-                            {
-                                //开始统计天 1,3,5,7,15,30
-                                DateTime currentDate = new DateTime(year, month, day);
-                                if (currentDate < minDate || currentDate > maxDate)
-                                    continue;
-                                InsertDay(state, currentDate);
-                                commandText = string.Empty;
-                                //时循环
-                                for (int hour = 0; hour < 24; hour++)
-                                {
-                                    currentDate = new DateTime(year, month, day, hour, 0, 0);
-                                    if (currentDate < minDate || currentDate > maxDate)
-                                        continue;
-                                    InsertHour(state, currentDate);
-                                }
-                            }
-                        }
-                    }
+                        DateTime currentTime = DateTime.Parse(item[0].ToString());
+                        //开始统计天 1,3,5,7,15,30
+                        if (currentTime < minDate || currentTime > maxDate)
+                            continue;
+                        InsertDay(state, currentTime, update);
+                        InsertHour(state, currentTime, update);
+                        index++;
+                        MyConsole.ShowProgress(index * 100 / total);
+                        int leftCount = total - index;
+                        string text = string.Empty;
+                        if (leftCount / 36000 > 0)
+                            text = string.Format("{0}小时", leftCount / 18000);
+                        else if (leftCount / 600 > 0)
+                            text = string.Format("{0}分钟", leftCount / 300);
+                        else
+                            text = string.Format("{0}秒", leftCount / 5);
+                        MyConsole.ShowLabel(string.Format("共{0}条统计数据,剩余{1}条，大概需要{2}", total, leftCount, text));
+                    }                   
+                    #endregion
+
+                    #region 历史统计(作废)
+
+                    ////年循环
+                    //for (int year = minDate.Year; year <= maxDate.Year; year++)
+                    //{
+                    //    //月循环
+                    //    for (int month = 1; month < 13; month++)
+                    //    {
+                    //        //天循环
+                    //        for (int day = 1; day <= DateTime.DaysInMonth(year, month); day++)
+                    //        {
+                    //            //开始统计天 1,3,5,7,15,30
+                    //            DateTime currentDate = new DateTime(year, month, day);
+                    //            if (currentDate < minDate || currentDate > maxDate)
+                    //                continue;
+                    //            InsertDay(state, currentDate);
+                    //            commandText = string.Empty;
+                    //            //时循环
+                    //            for (int hour = 0; hour < 24; hour++)
+                    //            {
+                    //                currentDate = new DateTime(year, month, day, hour, 0, 0);
+                    //                if (currentDate < minDate || currentDate > maxDate)
+                    //                    continue;
+                    //                InsertHour(state, currentDate);
+                    //            }
+                    //        }
+                    //    }
+                    //}
+
+                    #endregion
                 }
                 MyConsole.AppendLine("统计结束,耗时" + (DateTime.Now - currentDateTime).TotalSeconds + "秒");
                 action.Invoke();
@@ -605,27 +646,28 @@ namespace RainfallConvertTool.Utility
         /// </summary>
         /// <param name="state"></param>
         /// <param name="endDate"></param>
-        private static void InsertHour(string state, DateTime endDate)
+        private static void InsertHour(string state, DateTime endDate,bool update)
         {
             string commandText = string.Empty;
-
-            try
+            if (update)
             {
-                //存在就删除
-                commandText = string.Format("SELECT * FROM [DB_RainMonitor].[dbo].[RAINFALL_HOUR] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
-                object obj = SqlHelper.ExecuteScalar(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
-                if (obj != null)
+                try
                 {
-                    commandText = string.Format("delete FROM [DB_RainMonitor].[dbo].[RAINFALL_HOUR] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
-                    int result = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
-                    MyConsole.AppendLine(string.Format("删除一条小时统计数据:站点{0},时间{1}{2}..", state, endDate, result == 0 ? "失败" : "成功"));
+                    //存在就删除
+                    commandText = string.Format("SELECT * FROM [DB_RainMonitor].[dbo].[RAINFALL_HOUR] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
+                    object obj = SqlHelper.ExecuteScalar(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                    if (obj != null)
+                    {
+                        commandText = string.Format("delete FROM [DB_RainMonitor].[dbo].[RAINFALL_HOUR] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
+                        int result = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                        MyConsole.AppendLine(string.Format("删除一条小时统计数据:站点{0},时间{1}{2}..", state, endDate, result == 0 ? "失败" : "成功"));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MyConsole.AppendLine("执行数据库失败：" + ex.Message);
                 }
             }
-            catch (Exception ex)
-            {
-                MyConsole.AppendLine("执行数据库失败：" + ex.Message);
-            }
-
             try
             {
                 //结束时间，站号，1，3，6，12，24，48，72
@@ -645,24 +687,27 @@ namespace RainfallConvertTool.Utility
         /// </summary>
         /// <param name="state"></param>
         /// <param name="endDate"></param>
-        private static void InsertDay(string state, DateTime endDate)
+        private static void InsertDay(string state, DateTime endDate,bool update=false)
         {
             string commandText = string.Empty;
-            try
+            if (update)
             {
-                //存在就删除
-                commandText = string.Format("SELECT * FROM [DB_RainMonitor].[dbo].[RAINFALL_DAY] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
-                object obj = SqlHelper.ExecuteScalar(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
-                if (obj != null)
+                try
                 {
-                    commandText = string.Format("delete FROM [DB_RainMonitor].[dbo].[RAINFALL_DAY] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
-                    int result = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
-                    MyConsole.AppendLine(string.Format("删除一条天统计数据:站点{0},时间{1}{2}..", state, endDate, result == 0 ? "失败" : "成功"));
+                    //存在就删除
+                    commandText = string.Format("SELECT * FROM [DB_RainMonitor].[dbo].[RAINFALL_DAY] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
+                    object obj = SqlHelper.ExecuteScalar(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                    if (obj != null)
+                    {
+                        commandText = string.Format("delete FROM [DB_RainMonitor].[dbo].[RAINFALL_DAY] where MONITORNUM='{0}' and TIME='{1}'", state, endDate);
+                        int result = SqlHelper.ExecuteNonQuery(SqlHelper.GetConnSting(), System.Data.CommandType.Text, commandText);
+                        MyConsole.AppendLine(string.Format("删除一条天统计数据:站点{0},时间{1}{2}..", state, endDate, result == 0 ? "失败" : "成功"));
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                MyConsole.AppendLine("执行数据库失败：" + ex.Message);
+                catch (Exception ex)
+                {
+                    MyConsole.AppendLine("执行数据库失败：" + ex.Message);
+                }
             }
 
             //结束时间，站号，1，3，6，12，24，48，72
