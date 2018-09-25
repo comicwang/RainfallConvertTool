@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace RainfallConvertTool.Model
 {
-    public class RainfallModel
+    public class RAINFALL_STATE
     {
-        public RainfallModel(string MONITORNUM,decimal? lon,decimal? lat,decimal? alt,DateTime date,decimal? rainfall,int controller)
+        public RAINFALL_STATE(string MONITORNUM,decimal? lon,decimal? lat,decimal? alt,DateTime date,decimal? rainfall,int controller)
         {
             this.GUID = Guid.NewGuid().ToString();
             this.MONITORNUM = MONITORNUM;
@@ -20,13 +20,12 @@ namespace RainfallConvertTool.Model
             this.Controller = controller;
         }
         public string GUID { get; set; }
-
         public string MONITORNUM { get; set; }
         public decimal? LON { get; set; }
         public decimal? LAT { get; set; }
         public decimal? ALT { get; set; }
         public DateTime RecordDate { get; set; }
-        public int Controller { get; set; }
         public decimal? RAINFALL { get; set; }
+        public int Controller { get; set; }
     }
 }

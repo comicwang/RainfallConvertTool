@@ -551,7 +551,7 @@ namespace RainfallConvertTool.Utility
             SqlCommand cmd = new SqlCommand();
             bool mustCloseConnection = false;
             PrepareCommand(cmd, connection, (SqlTransaction)null, commandType, commandText, commandParameters, out mustCloseConnection);
-
+            cmd.CommandTimeout = 60;
             // 创建SqlDataAdapter和DataSet.   
             using (SqlDataAdapter da = new SqlDataAdapter(cmd))
             {
@@ -564,7 +564,8 @@ namespace RainfallConvertTool.Utility
 
                 if (mustCloseConnection)
                     connection.Close();
-
+                cmd.Dispose();
+                connection.Dispose();
                 return ds;
             }
         }

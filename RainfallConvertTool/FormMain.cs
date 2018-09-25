@@ -91,7 +91,7 @@ namespace RainfallConvertTool
 
         private void txtFilePath_TextChanged(object sender, EventArgs e)
         {
-            btnStart.Enabled = (!radioButton1.Checked) || (File.Exists(txtFilePath.Text) && radioButton1.Checked);
+            btnStart.Enabled = (!radioButton1.Checked) || (File.Exists(txtFilePath.Text.Split(';')[0]) && radioButton1.Checked);
         }
 
         private void checkBox2_CheckedChanged(object sender, EventArgs e)
@@ -164,12 +164,19 @@ namespace RainfallConvertTool
             }
             else if(radioButton2.Checked)
             {
-                RainfallUtility.StaticDataNew(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable, checkBox4.Checked);
+               // RainfallUtility.StaticDataNew(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable, checkBox4.Checked);
+               // RainfallUtility.StaticData(checkBox2.Checked ? txtState.Text : null, startT, endT);
+                RainfallUtility.BulkStaticData(SetEnable);
             }
             else
             {
                 RainfallUtility.StaticMaxData(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable);
             }
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            textBox1.Clear();
         }
     }
 }

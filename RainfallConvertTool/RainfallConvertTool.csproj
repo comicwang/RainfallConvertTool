@@ -58,10 +58,13 @@
     <Compile Include="FormMain.Designer.cs">
       <DependentUpon>FormMain.cs</DependentUpon>
     </Compile>
-    <Compile Include="Model\RainfallModel.cs" />
+    <Compile Include="Model\RAINFALL_DAY.cs" />
+    <Compile Include="Model\RAINFALL_HOUR.cs" />
+    <Compile Include="Model\RAINFALL_STATE.cs" />
     <Compile Include="Model\StaticsEnum.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Utility\SqlConnectionExtension.cs" />
     <Compile Include="Utility\MyConsole.cs" />
     <Compile Include="Utility\RainfallUtility.cs" />
     <Compile Include="Utility\SqlHelper.cs" />
@@ -92,7 +95,9 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="App.config" />
+    <None Include="App.config">
+      <SubType>Designer</SubType>
+    </None>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

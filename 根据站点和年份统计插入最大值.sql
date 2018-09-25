@@ -1,0 +1,1 @@
+select NEWID(),MAX(t2.[RAINFALL _1_DAY]),MAX(t2.[RAINFALL _3_DAY]),MAX(t2.[RAINFALL _5_DAY]),MAX(t2.[RAINFALL _7_DAY]),MAX(t2.[RAINFALL _15_DAY]),MAX(t2.[RAINFALL _30_DAY]) from [DB_RainMonitor].[dbo].[RAINFALL_DAY] t2 where datepart(yy,t2.TIME)='2008'
