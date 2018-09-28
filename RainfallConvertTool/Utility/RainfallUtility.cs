@@ -71,6 +71,11 @@ namespace RainfallConvertTool.Utility
                             decimal? rainfall = null;
                             if (content[index][i + 7] == "32766")
                                 rainfall = 0;
+                            else if (int.Parse(content[index][i + 7]) == 9990)
+                            {
+                                control = 9990;
+                                rainfall = 0;
+                            }
                             else
                                 rainfall = Decimal.Parse(content[index][i + 7]);
                             DateTime dateTemp = new DateTime(year, month, date, i, 0, 0);
@@ -88,6 +93,11 @@ namespace RainfallConvertTool.Utility
                             decimal? rainfall = null;
                             if (content[index][i - 17] == "32766")
                                 rainfall = 0;
+                            else if (int.Parse(content[index][i - 17]) == 9990)
+                            {
+                                control = 9990;
+                                rainfall = 0;
+                            }
                             else
                                 rainfall = Decimal.Parse(content[index][i - 17]) ;
                             DateTime dateTemp = new DateTime(year, month, date, i, 0, 0);
@@ -123,7 +133,15 @@ namespace RainfallConvertTool.Utility
                         int value = 0;  //控制码默认为0
                         decimal? key = Decimal.Parse(content[index][5]);
                         if (key == 32766)
+                        {
+                            value = 32766;
                             key = 0;
+                        }
+                        else if (key == 9990)
+                        {
+                            key = 0;
+                            value = 9990;
+                        }
                         DateTime dateTemp = DateTime.MinValue;
                         RAINFALL_STATE temp = null;
                         if (content[0][1] != "Lon")
@@ -932,7 +950,7 @@ namespace RainfallConvertTool.Utility
 
         #region Buk统计插入
 
-        public static void BulkStaticData(Action action)
+        public static void BulkStaticData(DateTime? startTime, DateTime? endTime,Action action)
         {
              CurrentThread = new Thread(new ParameterizedThreadStart(delegate
              {
@@ -945,6 +963,10 @@ namespace RainfallConvertTool.Utility
                  List<string> lstDate = new List<string>();
                  //查询所有站点
                  string sql = "select distinct(RecordDate) from DB_RainMonitor.dbo.RAINFALL_STATE";
+                 if (startTime.HasValue && endTime.HasValue)
+                     sql += $" where RecordDate>='{startTime}' and RecordDate<='{endTime}' order by RecordDate";
+                 else
+                     sql += "  order by RecordDate";
                  DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
                  foreach (DataRow item in ds.Tables[0].Rows)
                  {
@@ -954,37 +976,37 @@ namespace RainfallConvertTool.Utility
                  {
                      MyConsole.ShowProgress(i * 100 / lstDate.Count);
                      MyConsole.AppendLine("统计时间：" + lstDate[i]);
-                     MyConsole.ShowLabel(string.Format("共{0}条时间统计数据,剩余{1}条,小时数据{2}条/天数据{3},成功导入小时数据{4}/天数据{5}", lstDate.Count, lstDate.Count - i, hourTable == null ? 0 : hourTable.Rows.Count, dayTable == null ? 0 : dayTable.Rows.Count, hourCount, dayCount));
+                     MyConsole.ShowLabel(string.Format("剩余{0}条,小时数据{1}条/天数据{2},成功导入小时数据{3}/天数据{4}", lstDate.Count - i, hourTable == null ? 0 : hourTable.Rows.Count, dayTable == null ? 0 : dayTable.Rows.Count, hourCount, dayCount));
 
                      #region 统计小时数据
-                     if (hourTable != null && hourTable.Rows.Count >= 1000)
+                     if (hourTable != null && hourTable.Rows.Count >= 20000)
                      {
                          SqlHelper.GetConnection().BulkCopy(hourTable, hourTable.Rows.Count, "RAINFALL_HOUR", 3600);
                          MyConsole.AppendLine("共导入小时统计数据：" + hourTable.Rows.Count + "条");
                          hourCount += hourTable.Rows.Count;
                          hourTable.Rows.Clear();
                      }
-                     sql = string.Format(@"select CONVERT(char(36),NEWID()),MONITORNUM,
-                                    avg(case when LON is not null then lon end) as LON,
-                                    avg(case when lat is not null then lat end) as LAT,
-                                    avg(case when alt is not null then alt end) as ALT,
-                                    '{0}' as TIME,
-                                    sum(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-1,'{0}') then RAINFALL end) as RAINFALL_1_HOUR,
-                                    sum(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-3,'{0}') then RAINFALL end) as RAINFALL_3_HOUR,
-                                    sum(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-6,'{0}') then RAINFALL end) as RAINFALL_6_HOUR,
-                                    sum(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-12,'{0}') then RAINFALL end) as RAINFALL_12_HOUR,
-                                    sum(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-24,'{0}') then RAINFALL end) as RAINFALL_24_HOUR,
-                                    sum(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-48,'{0}') then RAINFALL end) as RAINFALL_48_HOUR,
-                                    sum(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-72,'{0}') then RAINFALL end) as RAINFALL_72_HOUR,
-                                    avg(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-1,'{0}') and Controller <>0 then Controller end) as            RAINFALL_1_HOUR_C,
-                                    avg(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-3,'{0}') and Controller <>0 then Controller end) as            RAINFALL_3_HOUR_C,
-                                    avg(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-6,'{0}') and Controller <>0 then Controller end) as            RAINFALL_6_HOUR_C,
-                                    avg(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-12,'{0}') and Controller <>0 then Controller end) as            RAINFALL_12_HOUR_C,
-                                    avg(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-24,'{0}') and Controller <>0 then Controller end) as            RAINFALL_24_HOUR_C,
-                                    avg(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-48,'{0}') and Controller <>0 then Controller end) as            RAINFALL_48_HOUR_C,
-                                    avg(case when RecordDate<='{0}' and RecordDate>dateadd(hh,-72,'{0}') and Controller <>0 then Controller end) as            RAINFALL_72_HOUR_C   
+                     sql = $@"select CONVERT(char(36),NEWID()),MONITORNUM,
+                                    max(lon) as LON,
+                                    max(lon) as LAT,
+                                    max(alt) as ALT,
+                                    '{lstDate[i]}' as TIME,
+                                    sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-1)}' then RAINFALL end) as RAINFALL_1_HOUR,
+                                    sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-3)}' then RAINFALL end) as RAINFALL_3_HOUR,
+                                    sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-6)}' then RAINFALL end) as RAINFALL_6_HOUR,
+                                    sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-12)}' then RAINFALL end) as RAINFALL_12_HOUR,
+                                    sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-24)}' then RAINFALL end) as RAINFALL_24_HOUR,
+                                    sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-48)}' then RAINFALL end) as RAINFALL_48_HOUR,
+                                    sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-72)}' then RAINFALL end) as RAINFALL_72_HOUR,
+                                    max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-1)}' and Controller >0 then Controller end) as            RAINFALL_1_HOUR_C,
+                                    max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-3)}' and Controller >0 then Controller end) as            RAINFALL_3_HOUR_C,
+                                    max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-6)}' and Controller >0 then Controller end) as            RAINFALL_6_HOUR_C,
+                                    max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-12)}' and Controller >0 then Controller end) as            RAINFALL_12_HOUR_C,
+                                    max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-24)}' and Controller >0 then Controller end) as            RAINFALL_24_HOUR_C,
+                                    max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-48)}' and Controller >0 then Controller end) as            RAINFALL_48_HOUR_C,
+                                    max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-72)}' and Controller >0 then Controller end) as            RAINFALL_72_HOUR_C   
                                     from DB_RainMonitor.dbo.[RAINFALL_STATE] 
-                                    where RecordDate<'{0}' and RecordDate>=dateadd(DAY,-2,'{0}') group by MONITORNUM", lstDate[i]);
+                                    where RecordDate<='{lstDate[i]}' and RecordDate>='{DateTime.Parse(lstDate[i]).AddDays(-3)}' group by MONITORNUM";
                      ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
                      //MyConsole.AppendLine("共查询小时统计数据：" + ds.Tables[0].Rows.Count + "条");
                      if (hourTable == null)
@@ -1002,32 +1024,32 @@ namespace RainfallConvertTool.Utility
                      #endregion
 
                      #region 统计天数据
-                     if (dayTable != null && dayTable.Rows.Count >= 1000)
+                     if (dayTable != null && dayTable.Rows.Count >= 20000)
                      {
                          SqlHelper.GetConnection().BulkCopy(dayTable, dayTable.Rows.Count, "RAINFALL_DAY", 3600);
                          MyConsole.AppendLine("共导入天统计数据：" + dayTable.Rows.Count + "条");
                          dayCount += dayTable.Rows.Count;
                          dayTable.Rows.Clear();
                      }
-                     sql = string.Format(@"select CONVERT(char(36),NEWID()),MONITORNUM,
-                                        avg(case when LON is not null then lon end) as LON,
-                                        avg(case when lat is not null then lat end) as LAT,
-                                        avg(case when alt is not null then alt end) as ALT,
-                                        '{0}' as TIME,
-                                        sum(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-1,'{0}') then RAINFALL end) as RAINFALL_1_DAY,
-                                        sum(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-3,'{0}') then RAINFALL end) as RAINFALL_3_DAY,
-                                        sum(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-5,'{0}') then RAINFALL end) as RAINFALL_5_DAY,
-                                        sum(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-7,'{0}') then RAINFALL end) as RAINFALL_7_DAY,
-                                        sum(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-15,'{0}') then RAINFALL end) as RAINFALL_15_DAY,
-                                        sum(case when RecordDate<='{0}' and RecordDate>dateadd(MONTH,-1,'{0}') then RAINFALL end) as RAINFALL_30_DAY,
-                                        avg(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-1,'{0}') and Controller <>0 then Controller end) as RAINFALL_1_DAY_C,
-                                        avg(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-3,'{0}') and Controller <>0 then Controller end) as RAINFALL_3_DAY_C,
-                                        avg(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-5,'{0}') and Controller <>0 then Controller end) as RAINFALL_5_DAY_C,
-                                        avg(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-7,'{0}') and Controller <>0 then Controller end) as RAINFALL_7_DAY_C,
-                                        avg(case when RecordDate<='{0}' and RecordDate>dateadd(DAY,-15,'{0}') and Controller <>0 then Controller end) as RAINFALL_15_DAY_C,
-                                        avg(case when RecordDate<='{0}' and RecordDate>dateadd(MONTH,-1,'{0}') and Controller <>0 then Controller end) as RAINFALL_30_DAY_C
+                     sql = $@"select CONVERT(char(36),NEWID()),MONITORNUM,
+                                         max(lon) as LON,
+                                         max(lon) as LAT,
+                                         max(alt) as ALT,
+                                        '{lstDate[i]}' as TIME,
+                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-1)}' then RAINFALL end) as RAINFALL_1_DAY,
+                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-3)}' then RAINFALL end) as RAINFALL_3_DAY,
+                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-5)}' then RAINFALL end) as RAINFALL_5_DAY,
+                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-7)}' then RAINFALL end) as RAINFALL_7_DAY,
+                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-15)}' then RAINFALL end) as RAINFALL_15_DAY,
+                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddMonths(-1)}' then RAINFALL end) as RAINFALL_30_DAY,
+                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-1)}' and Controller >0 then Controller end) as RAINFALL_1_DAY_C,
+                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-3)}' and Controller >0 then Controller end) as RAINFALL_3_DAY_C,
+                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-5)}' and Controller >0 then Controller end) as RAINFALL_5_DAY_C,
+                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-7)}' and Controller >0 then Controller end) as RAINFALL_7_DAY_C,
+                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-15)}' and Controller >0 then Controller end) as RAINFALL_15_DAY_C,
+                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddMonths(-1)}' and Controller >0 then Controller end) as RAINFALL_30_DAY_C
                                         from DB_RainMonitor.dbo.[RAINFALL_STATE] 
-                                        where RecordDate<'{0}' and RecordDate>=dateadd(MONTH,-1,'{0}') group by MONITORNUM", lstDate[i]);
+                                        where RecordDate<='{lstDate[i]}' and RecordDate>='{DateTime.Parse(lstDate[i]).AddMonths(-1)}' group by MONITORNUM";
                      ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
                      //MyConsole.AppendLine("共查询天统计数据：" + ds.Tables[0].Rows.Count + "条");
                      if (dayTable == null)
@@ -1186,6 +1208,60 @@ namespace RainfallConvertTool.Utility
             }));
             CurrentThread.IsBackground = true;
             CurrentThread.Start();
+        }
+
+        #endregion
+
+        #region 保存条件记录数据
+
+        /// <summary>
+        /// 保存入库条件数据
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        public static void SaveConditonData(int type, DateTime? start, DateTime? end)
+        {
+            string commandText = $@"delete FROM [DB_RainMonitor].[dbo].[TEMP_RAIN] where putType={type};
+insert into [DB_RainMonitor].[dbo].[TEMP_RAIN] values(newid(),{type},'{start},0');
+insert into [DB_RainMonitor].[dbo].[TEMP_RAIN] values(newid(),{type},'{end}',1);";
+
+            SqlHelper.ExecuteNonQuery(SqlHelper.GetConnection(), CommandType.Text, commandText);
+        }
+
+        /// <summary>
+        /// 根据类型获取入库的时间
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
+        public static DateTime[] GetConditionData(int type)
+        {
+            string commandText = $"select * from [DB_RainMonitor].[dbo].[TEMP_RAIN] where putType={type}";
+
+            DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
+
+            if (ds.Tables[0].Rows.Count == 0)
+            {
+                commandText = "select MIN(RecordDate),MAX(RecordDate) from DB_RainMonitor.dbo.RAINFALL_STATE";
+                ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
+                if (ds.Tables[0].Rows.Count == 0)
+                {
+                    return null;
+                }
+                else
+                {
+                    return new DateTime[] { Convert.ToDateTime(ds.Tables[0].Rows[0][0]), Convert.ToDateTime(ds.Tables[0].Rows[0][1]) };
+                }
+            }
+            else
+            {
+                List<DateTime> result = new List<DateTime>();
+                foreach (DataRow row in ds.Tables[0].Rows)
+                {
+                    result.Add(Convert.ToDateTime(row[2]));
+                }
+                return result.ToArray();
+            }
         }
 
         #endregion

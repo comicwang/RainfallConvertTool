@@ -98,7 +98,6 @@ namespace RainfallConvertTool.Utility
                         shouldCloseConnection = true;
                         conn.Open();
                     }
-
                     sbc.WriteToServer(dtToWrite);
                 }
             }

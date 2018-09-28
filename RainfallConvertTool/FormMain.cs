@@ -64,6 +64,7 @@ namespace RainfallConvertTool
             textBox1.BindConsole();
             progressBar1.BindProgressBar();
             toolleftTime.BindLabel();
+            SetDateTime();
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -92,6 +93,22 @@ namespace RainfallConvertTool
         private void txtFilePath_TextChanged(object sender, EventArgs e)
         {
             btnStart.Enabled = (!radioButton1.Checked) || (File.Exists(txtFilePath.Text.Split(';')[0]) && radioButton1.Checked);
+            SetDateTime();
+        }
+
+        private void SetDateTime()
+        {
+            DateTime[] result= RainfallUtility.GetConditionData(radioButton1.Checked ? 0 : (radioButton2.Checked ? 1 : 2));
+            if (result != null)
+            {
+                dtpStart.Value = result[0];
+                dtpEnd.Value = result[1];
+            }
+        }
+
+        private void SaveDateTime()
+        {
+            RainfallUtility.SaveConditonData(radioButton1.Checked ? 0 : (radioButton2.Checked ? 1 : 2), dtpStart.Value, dtpEnd.Value);
         }
 
         private void checkBox2_CheckedChanged(object sender, EventArgs e)
@@ -162,11 +179,11 @@ namespace RainfallConvertTool
                     RainfallUtility.InsertMetaData(item, checkBox2.Checked ? txtState.Text : null, start, end, startT, endT, checkBox4.Checked, SetEnable);
                 }
             }
-            else if(radioButton2.Checked)
+            else if (radioButton2.Checked)
             {
-               // RainfallUtility.StaticDataNew(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable, checkBox4.Checked);
-               // RainfallUtility.StaticData(checkBox2.Checked ? txtState.Text : null, startT, endT);
-                RainfallUtility.BulkStaticData(SetEnable);
+                // RainfallUtility.StaticDataNew(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable, checkBox4.Checked);
+                // RainfallUtility.StaticData(checkBox2.Checked ? txtState.Text : null, startT, endT);
+                RainfallUtility.BulkStaticData(startT, endT, SetEnable);
             }
             else
             {
@@ -177,6 +194,12 @@ namespace RainfallConvertTool
         private void button1_Click(object sender, EventArgs e)
         {
             textBox1.Clear();
+        }
+
+        private void FormMain_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (checkBox1.Checked)
+                SaveDateTime();
         }
     }
 }
