@@ -6,6 +6,7 @@ using System.Data.SqlClient;
 using System.Data.SQLite;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,15 @@ namespace RainfallConvertTool.Utility
         static int total = 0;
         static int successed = 0;
         static int failed = 0;
+
+        /// <summary>
+        /// 判断去重的委托方法
+        /// </summary>
+        static Func<RAINFALL_STATE, List<RAINFALL_STATE>, bool> rainfallFunc = (item, lstTtem) =>
+          {
+              var result = lstTtem.Where(t => t.RecordDate == item.RecordDate && t.MONITORNUM == item.MONITORNUM).FirstOrDefault();
+              return result == null;
+          };
 
         #region 基础数据入库
 
@@ -84,7 +94,12 @@ namespace RainfallConvertTool.Utility
                                 continue;
                             RAINFALL_STATE temp = new RAINFALL_STATE(state, null, null, null, dateTemp, rainfall, control);
                             //InsertToSql(temp, update);
-                            RainFallModels.Add(temp);
+                            if (update)
+                            {
+                                RainFallModels.Add(temp, rainfallFunc);
+                            }
+                            else
+                                RainFallModels.Add(temp);
                             //Thread.Sleep(100);
                         }
                         for (int i = 21; i < 24; i++)
@@ -106,7 +121,12 @@ namespace RainfallConvertTool.Utility
                                 continue;
 
                             RAINFALL_STATE temp = new RAINFALL_STATE(state, null, null, null, dateTemp, rainfall, control);
-                            RainFallModels.Add(temp);
+                            if (update)
+                            {
+                                RainFallModels.Add(temp, rainfallFunc);
+                            }
+                            else
+                                RainFallModels.Add(temp);
                             //InsertToSql(temp, update);
                             //Thread.Sleep(100);
                         }
@@ -157,7 +177,12 @@ namespace RainfallConvertTool.Utility
                         //筛选时间
                         if ((startTime.HasValue && dateTemp < startTime) || (endTime.HasValue && dateTemp > endTime))
                             continue;
-                        RainFallModels.Add(temp);
+                        if (update)
+                        {
+                            RainFallModels.Add(temp, rainfallFunc);
+                        }
+                        else
+                            RainFallModels.Add(temp);
                         //InsertToSql(temp, update);
                         //Thread.Sleep(100);
                     }
@@ -187,7 +212,12 @@ namespace RainfallConvertTool.Utility
                         if ((startTime.HasValue && dateTemp < startTime) || (endTime.HasValue && dateTemp > endTime))
                             continue;
                         RAINFALL_STATE temp = new RAINFALL_STATE(state, null, null, null, dateTemp, key, value);
-                        RainFallModels.Add(temp);
+                        if (update)
+                        {
+                            RainFallModels.Add(temp, rainfallFunc);
+                        }
+                        else
+                            RainFallModels.Add(temp);
                         //InsertToSql(temp, update);
                         //Thread.Sleep(100);
                     }
@@ -964,7 +994,7 @@ namespace RainfallConvertTool.Utility
                  //查询所有站点
                  string sql = "select distinct(RecordDate) from DB_RainMonitor.dbo.RAINFALL_STATE";
                  if (startTime.HasValue && endTime.HasValue)
-                     sql += $" where RecordDate>='{startTime}' and RecordDate<='{endTime}' order by RecordDate";
+                     sql += $" where RecordDate>='{startTime}' and RecordDate<'{endTime}' order by RecordDate";
                  else
                      sql += "  order by RecordDate";
                  DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
@@ -1151,7 +1181,7 @@ namespace RainfallConvertTool.Utility
                             MyConsole.ShowProgress(year * 100 / maxDate.Year);
 
                             //获取天最大值
-                            string commmandText = "select MAX([RAINFALL _1_DAY]),MAX([RAINFALL _3_DAY]),MAX([RAINFALL _5_DAY]),MAX([RAINFALL _7_DAY]),MAX([RAINFALL _15_DAY]),MAX([RAINFALL _30_DAY]) from RAINFALL_DAY where datepart(yy,TIME)='" + year + "'";
+                            string commmandText = "select MAX(RAINFALL_1_DAY),MAX(RAINFALL_3_DAY),MAX(RAINFALL_5_DAY),MAX(RAINFALL_7_DAY),MAX(RAINFALL_15_DAY),MAX(RAINFALL_30_DAY) from RAINFALL_DAY where datepart(yy,TIME)='" + year + "'";
                             ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commmandText);
                             decimal? day = ConvertDecimal(ds.Tables[0].Rows[0][0]);
                             if (day == null)
@@ -1165,7 +1195,7 @@ namespace RainfallConvertTool.Utility
                             decimal? day_15 = ConvertDecimal(ds.Tables[0].Rows[0][4]);
                             decimal? day_30 = ConvertDecimal(ds.Tables[0].Rows[0][5]);
 
-                            commmandText = "select MAX([RAINFALL _1_HOUR]),MAX([RAINFALL _3_HOUR]),MAX([RAINFALL _6_HOUR]),MAX([RAINFALL _12_HOUR]),MAX([RAINFALL _24_HOUR]),MAX([RAINFALL _48_HOUR]),MAX([RAINFALL _72_HOUR]) from RAINFALL_HOUR where datepart(yy,TIME)='" + year + "'";
+                            commmandText = "select MAX(RAINFALL_1_HOUR),MAX(RAINFALL_3_HOUR),MAX(RAINFALL_6_HOUR),MAX(RAINFALL_12_HOUR),MAX(RAINFALL_24_HOUR),MAX(RAINFALL_48_HOUR),MAX(RAINFALL_72_HOUR) from RAINFALL_HOUR where datepart(yy,TIME)='" + year + "'";
                             ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commmandText);
                             decimal? hour = ConvertDecimal(ds.Tables[0].Rows[0][0]);
                             decimal? hour_3 = ConvertDecimal(ds.Tables[0].Rows[0][1]);
@@ -1210,6 +1240,97 @@ namespace RainfallConvertTool.Utility
             CurrentThread.Start();
         }
 
+        public static void BulkStaticMax(DateTime? startTime, DateTime? endTime, Action action)
+        {
+            CurrentThread = new Thread(new ParameterizedThreadStart(delegate
+            {
+                DateTime currentDate = DateTime.Now;
+
+                //获取所有年份信息
+                List<string> lstYear = new List<string>();
+                DataTable maxTable = null;
+                int maxCount = 0;
+                string sql = "select distinct(datepart(YEAR,recorddate)) from [DB_RainMonitor].[dbo].[RAINFALL_STATE]";
+                if (startTime.HasValue && endTime.HasValue)
+                    sql += $" where RecordDate>='{startTime}' and RecordDate<'{endTime}'";
+                DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
+                foreach (DataRow item in ds.Tables[0].Rows)
+                {
+                    lstYear.Add(item[0].ToString());
+                }
+                for (int i = 0; i < lstYear.Count; i++)
+                {
+                    MyConsole.ShowProgress(i * 100 / lstYear.Count);
+                    MyConsole.AppendLine("统计时间：" + lstYear[i]);
+                    MyConsole.ShowLabel($"剩余{lstYear.Count - i - 1}条数据，查询统计数据{(maxTable==null?0:maxTable.Rows.Count)}条,共导入年份最大统计数据{maxCount}条");
+                    if (maxTable != null && maxTable.Rows.Count >= 500)
+                    {
+                        maxTable.Columns.Remove("MONITORNUM1");
+                        maxTable.Columns.Remove("YEAR1");
+                        SqlHelper.GetConnection().BulkCopy(maxTable, maxTable.Rows.Count, "RAINFALL_YEAR_MAX", 3600);
+                        MyConsole.AppendLine("导入年最大值统计数据：" + maxTable.Rows.Count + "条");
+                        maxCount += maxTable.Rows.Count;
+                        maxTable = null;
+                    }
+                    sql = $@"select * from 
+                                     (select CONVERT(char(36),NEWID()) as GUID,
+                                         MONITORNUM,
+                                         MAX(LON) as LON,MAX(LAT) as LAT,
+                                         MAX(ALT) as ALT,'{i}' as YEAR,
+                                         null as MAX_10_MIN,
+                                         null as MAX_30_MIN,
+                                         MAX(RAINFALL_1_HOUR) as MAX_1_HOUR,
+                                         MAX(RAINFALL_3_HOUR) as MAX_3_HOUR,
+                                         MAX(RAINFALL_6_HOUR) as MAX_6_HOUR,
+                                         MAX(RAINFALL_12_HOUR) as MAX_12_HOUR,
+                                         MAX(RAINFALL_24_HOUR) as MAX_24_HOUR,
+                                         MAX(RAINFALL_48_HOUR) as MAX_48_HOUR,
+                                         MAX(RAINFALL_72_HOUR) as MAX_72_HOUR 
+                                         from [DB_RainMonitor].[dbo].[RAINFALL_HOUR] 
+                                         where TIME>='{i}-1-1 0:00:00' and TIME<'{i+1}-1-1 0:00:00' 
+                                         group by MONITORNUM) as A left join 
+                                         (select * from 
+                                         (select MAX(RAINFALL_1_DAY) as MAX_1_DAY,
+                                         MAX(RAINFALL_3_DAY) as MAX_3_DAY,
+                                         MAX(RAINFALL_5_DAY) as MAX_5_DAY,
+                                         MAX(RAINFALL_7_DAY) as MAX_7_DAY,
+                                         MAX(RAINFALL_15_DAY) as MAX_15_DAY,
+                                         MAX(RAINFALL_30_DAY) as MAX_30_DAY,
+                                         MONITORNUM,
+                                         '{i}' as YEAR 
+                                         from [DB_RainMonitor].[dbo].[RAINFALL_DAY] 
+                                         where TIME>='{i}-1-1 0:00:00' and TIME<'{i+1}-1-1 0:00:00' group by MONITORNUM) B) as B 
+                                         on A.MONITORNUM = B.MONITORNUM and A.YEAR = B.YEAR";
+
+                    ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
+                    //MyConsole.AppendLine("共查询小时统计数据：" + ds.Tables[0].Rows.Count + "条");
+                    if (maxTable == null)
+                    {
+                        maxTable = ds.Tables[0].Copy();
+                    }
+                    else
+                    {
+                        foreach (DataRow item in ds.Tables[0].Rows)
+                        {
+                            maxTable.ImportRow(item);
+                        }
+                    }
+                }
+
+                maxTable.Columns.Remove("MONITORNUM1");
+                maxTable.Columns.Remove("YEAR1");
+                SqlHelper.GetConnection().BulkCopy(maxTable, maxTable.Rows.Count, "RAINFALL_YEAR_MAX", 3600);
+                MyConsole.AppendLine("导入年最大值统计数据：" + maxTable.Rows.Count + "条");
+                maxCount += maxTable.Rows.Count;
+                maxTable = null;
+
+                MyConsole.AppendLine("统计结束,耗时" + (DateTime.Now - currentDate).TotalSeconds + "秒");
+                action.Invoke();
+            }));
+            CurrentThread.IsBackground = true;
+            CurrentThread.Start();
+        }
+
         #endregion
 
         #region 保存条件记录数据
@@ -1223,7 +1344,7 @@ namespace RainfallConvertTool.Utility
         public static void SaveConditonData(int type, DateTime? start, DateTime? end)
         {
             string commandText = $@"delete FROM [DB_RainMonitor].[dbo].[TEMP_RAIN] where putType={type};
-insert into [DB_RainMonitor].[dbo].[TEMP_RAIN] values(newid(),{type},'{start},0');
+insert into [DB_RainMonitor].[dbo].[TEMP_RAIN] values(newid(),{type},'{start}',0);
 insert into [DB_RainMonitor].[dbo].[TEMP_RAIN] values(newid(),{type},'{end}',1);";
 
             SqlHelper.ExecuteNonQuery(SqlHelper.GetConnection(), CommandType.Text, commandText);
@@ -1236,31 +1357,38 @@ insert into [DB_RainMonitor].[dbo].[TEMP_RAIN] values(newid(),{type},'{end}',1);
         /// <returns></returns>
         public static DateTime[] GetConditionData(int type)
         {
-            string commandText = $"select * from [DB_RainMonitor].[dbo].[TEMP_RAIN] where putType={type}";
-
-            DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
-
-            if (ds.Tables[0].Rows.Count == 0)
+            try
             {
-                commandText = "select MIN(RecordDate),MAX(RecordDate) from DB_RainMonitor.dbo.RAINFALL_STATE";
-                ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
+                string commandText = $"select * from [DB_RainMonitor].[dbo].[TEMP_RAIN] where putType={type}";
+
+                DataSet ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
+
                 if (ds.Tables[0].Rows.Count == 0)
                 {
-                    return null;
+                    commandText = "select MIN(RecordDate),MAX(RecordDate) from DB_RainMonitor.dbo.RAINFALL_STATE";
+                    ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, commandText);
+                    if (ds.Tables[0].Rows.Count == 0)
+                    {
+                        return null;
+                    }
+                    else
+                    {
+                        return new DateTime[] { Convert.ToDateTime(ds.Tables[0].Rows[0][0]), Convert.ToDateTime(ds.Tables[0].Rows[0][1]) };
+                    }
                 }
                 else
                 {
-                    return new DateTime[] { Convert.ToDateTime(ds.Tables[0].Rows[0][0]), Convert.ToDateTime(ds.Tables[0].Rows[0][1]) };
+                    List<DateTime> result = new List<DateTime>();
+                    foreach (DataRow row in ds.Tables[0].Rows)
+                    {
+                        result.Add(Convert.ToDateTime(row[2]));
+                    }
+                    return result.ToArray();
                 }
             }
-            else
+            catch
             {
-                List<DateTime> result = new List<DateTime>();
-                foreach (DataRow row in ds.Tables[0].Rows)
-                {
-                    result.Add(Convert.ToDateTime(row[2]));
-                }
-                return result.ToArray();
+                return null;
             }
         }
 

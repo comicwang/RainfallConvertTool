@@ -165,8 +165,8 @@ namespace RainfallConvertTool
                 end = null;
             }
 
-            DateTime? startT = dtpStart.Value;
-            DateTime? endT = dtpEnd.Value;
+            DateTime? startT = dtpStart.Value.Date;
+            DateTime? endT = dtpEnd.Value.Date;
             if (checkBox1.Checked == false)
             {
                 startT = null;
@@ -187,7 +187,8 @@ namespace RainfallConvertTool
             }
             else
             {
-                RainfallUtility.StaticMaxData(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable);
+                //RainfallUtility.StaticMaxData(checkBox2.Checked ? txtState.Text : null, startT, endT, SetEnable);
+                RainfallUtility.BulkStaticMax(startT, endT, SetEnable);
             }
         }
 
