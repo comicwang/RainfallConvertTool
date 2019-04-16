@@ -65,12 +65,19 @@ namespace RainfallConvertTool
 
         public static void ShowLabel(string vaule)
         {
-            if (_label == null)
-                throw new ArgumentNullException("_label is unbind");
-            //if (_label.InvokeRequired)
-            //    _label.Invoke(new Action<int>((t) => { _progressBar.Value = t; }), vaule);
-            //else
-            _label.Text = vaule;
+            try
+            {
+                if (_label == null)
+                    throw new ArgumentNullException("_label is unbind");
+                //if (_label.InvokeRequired)
+                //    _label.Invoke(new Action<int>((t) => { _progressBar.Value = t; }), vaule);
+                //else
+                _label.Text = vaule;
+            }
+            catch
+            {
+
+            }
         }
     }
 }

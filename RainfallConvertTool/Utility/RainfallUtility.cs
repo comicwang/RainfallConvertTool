@@ -1002,6 +1002,12 @@ namespace RainfallConvertTool.Utility
                  {
                      lstDate.Add(item[0].ToString());
                  }
+
+
+                 //筛选天日期
+                 List<DateTime> lsDays = new List<DateTime>();
+
+
                  for (int i = 0; i < lstDate.Count; i++)
                  {
                      MyConsole.ShowProgress(i * 100 / lstDate.Count);
@@ -1022,6 +1028,7 @@ namespace RainfallConvertTool.Utility
                                     max(alt) as ALT,
                                     '{lstDate[i]}' as TIME,
                                     sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-1)}' then RAINFALL end) as RAINFALL_1_HOUR,
+                                    sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-2)}' then RAINFALL end) as RAINFALL_2_HOUR,
                                     sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-3)}' then RAINFALL end) as RAINFALL_3_HOUR,
                                     sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-6)}' then RAINFALL end) as RAINFALL_6_HOUR,
                                     sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-12)}' then RAINFALL end) as RAINFALL_12_HOUR,
@@ -1029,6 +1036,7 @@ namespace RainfallConvertTool.Utility
                                     sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-48)}' then RAINFALL end) as RAINFALL_48_HOUR,
                                     sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-72)}' then RAINFALL end) as RAINFALL_72_HOUR,
                                     max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-1)}' and Controller >0 then Controller end) as            RAINFALL_1_HOUR_C,
+                                    max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-2)}' and Controller >0 then Controller end) as            RAINFALL_2_HOUR_C,
                                     max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-3)}' and Controller >0 then Controller end) as            RAINFALL_3_HOUR_C,
                                     max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-6)}' and Controller >0 then Controller end) as            RAINFALL_6_HOUR_C,
                                     max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddHours(-12)}' and Controller >0 then Controller end) as            RAINFALL_12_HOUR_C,
@@ -1053,48 +1061,54 @@ namespace RainfallConvertTool.Utility
 
                      #endregion
 
-                     #region 统计天数据
-                     if (dayTable != null && dayTable.Rows.Count >= 20000)
+                     DateTime dt = DateTime.Parse(lstDate[i]).Date;
+                     if (!lsDays.Contains(dt))
                      {
-                         SqlHelper.GetConnection().BulkCopy(dayTable, dayTable.Rows.Count, "RAINFALL_DAY", 3600);
-                         MyConsole.AppendLine("共导入天统计数据：" + dayTable.Rows.Count + "条");
-                         dayCount += dayTable.Rows.Count;
-                         dayTable.Rows.Clear();
-                     }
-                     sql = $@"select CONVERT(char(36),NEWID()),MONITORNUM,
+                         lsDays.Add(dt);
+
+                         #region 统计天数据
+                         if (dayTable != null && dayTable.Rows.Count >= 20000)
+                         {
+                             SqlHelper.GetConnection().BulkCopy(dayTable, dayTable.Rows.Count, "RAINFALL_DAY", 3600);
+                             MyConsole.AppendLine("共导入天统计数据：" + dayTable.Rows.Count + "条");
+                             dayCount += dayTable.Rows.Count;
+                             dayTable.Rows.Clear();
+                         }
+                         sql = $@"select CONVERT(char(36),NEWID()),MONITORNUM,
                                          max(lon) as LON,
                                          max(lon) as LAT,
                                          max(alt) as ALT,
-                                        '{lstDate[i]}' as TIME,
-                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-1)}' then RAINFALL end) as RAINFALL_1_DAY,
-                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-3)}' then RAINFALL end) as RAINFALL_3_DAY,
-                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-5)}' then RAINFALL end) as RAINFALL_5_DAY,
-                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-7)}' then RAINFALL end) as RAINFALL_7_DAY,
-                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-15)}' then RAINFALL end) as RAINFALL_15_DAY,
-                                        sum(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddMonths(-1)}' then RAINFALL end) as RAINFALL_30_DAY,
-                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-1)}' and Controller >0 then Controller end) as RAINFALL_1_DAY_C,
-                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-3)}' and Controller >0 then Controller end) as RAINFALL_3_DAY_C,
-                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-5)}' and Controller >0 then Controller end) as RAINFALL_5_DAY_C,
-                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-7)}' and Controller >0 then Controller end) as RAINFALL_7_DAY_C,
-                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddDays(-15)}' and Controller >0 then Controller end) as RAINFALL_15_DAY_C,
-                                        max(case when RecordDate<='{lstDate[i]}' and RecordDate>'{DateTime.Parse(lstDate[i]).AddMonths(-1)}' and Controller >0 then Controller end) as RAINFALL_30_DAY_C
+                                        '{dt}' as TIME,
+                                        sum(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-1)}' then RAINFALL end) as RAINFALL_1_DAY,
+                                        sum(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-3)}' then RAINFALL end) as RAINFALL_3_DAY,
+                                        sum(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-5)}' then RAINFALL end) as RAINFALL_5_DAY,
+                                        sum(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-7)}' then RAINFALL end) as RAINFALL_7_DAY,
+                                        sum(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-15)}' then RAINFALL end) as RAINFALL_15_DAY,
+                                        sum(case when RecordDate<='{dt}' and RecordDate>'{dt.AddMonths(-1)}' then RAINFALL end) as RAINFALL_30_DAY,
+                                        max(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-1)}' and Controller >0 then Controller end) as RAINFALL_1_DAY_C,
+                                        max(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-3)}' and Controller >0 then Controller end) as RAINFALL_3_DAY_C,
+                                        max(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-5)}' and Controller >0 then Controller end) as RAINFALL_5_DAY_C,
+                                        max(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-7)}' and Controller >0 then Controller end) as RAINFALL_7_DAY_C,
+                                        max(case when RecordDate<='{dt}' and RecordDate>'{dt.AddDays(-15)}' and Controller >0 then Controller end) as RAINFALL_15_DAY_C,
+                                        max(case when RecordDate<='{dt}' and RecordDate>'{dt.AddMonths(-1)}' and Controller >0 then Controller end) as RAINFALL_30_DAY_C
                                         from DB_RainMonitor.dbo.[RAINFALL_STATE] 
-                                        where RecordDate<='{lstDate[i]}' and RecordDate>='{DateTime.Parse(lstDate[i]).AddMonths(-1)}' group by MONITORNUM";
-                     ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
-                     //MyConsole.AppendLine("共查询天统计数据：" + ds.Tables[0].Rows.Count + "条");
-                     if (dayTable == null)
-                     {
-                         dayTable = ds.Tables[0].Copy();
-                     }
-                     else
-                     {
-                         foreach (DataRow item in ds.Tables[0].Rows)
+                                        where RecordDate<='{dt}' and RecordDate>='{dt.AddMonths(-1)}' group by MONITORNUM";
+                         ds = SqlHelper.ExecuteDataset(SqlHelper.GetConnection(), CommandType.Text, sql);
+                         //MyConsole.AppendLine("共查询天统计数据：" + ds.Tables[0].Rows.Count + "条");
+                         if (dayTable == null)
                          {
-                             dayTable.ImportRow(item);
+                             dayTable = ds.Tables[0].Copy();
                          }
-                     }
+                         else
+                         {
+                             foreach (DataRow item in ds.Tables[0].Rows)
+                             {
+                                 dayTable.ImportRow(item);
+                             }
+                         }
 
-                     #endregion
+                         #endregion
+                     }
                  }
 
                  SqlHelper.GetConnection().BulkCopy(hourTable, hourTable.Rows.Count, "RAINFALL_HOUR", 3600);
